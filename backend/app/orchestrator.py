@@ -32,6 +32,7 @@ class Orchestrator:
         self.llm = self._build_llm()
         self._tasks: dict[str, asyncio.Task] = {}
         self._listeners: dict[str, list[EventCallback]] = {}
+        self._cancel_requested: set[str] = set()
 
     def _build_llm(self) -> LLMClient:
         active = self.connections.get_active() if self.connections else None
@@ -67,10 +68,25 @@ class Orchestrator:
         if mission.id in self._tasks and not self._tasks[mission.id].done():
             return mission
         self.refresh_llm()
+        self._cancel_requested.discard(mission.id)
         mission.status = MissionStatus.running
         mission.error = None
         self.store.save(mission)
         self._tasks[mission.id] = asyncio.create_task(self._run(mission.id))
+        return mission
+
+    def cancel(self, mission_id: str) -> Mission | None:
+        mission = self.store.get(mission_id)
+        if mission is None:
+            return None
+        self._cancel_requested.add(mission_id)
+        task = self._tasks.get(mission_id)
+        if task and not task.done():
+            task.cancel()
+        mission.status = MissionStatus.cancelled
+        mission.current_role = None
+        mission.error = "Остановлено пользователем"
+        self.store.save(mission)
         return mission
 
     async def _run(self, mission_id: str) -> None:
@@ -81,14 +97,20 @@ class Orchestrator:
             await self._emit(mission_id, "mission_started", {"status": mission.status.value})
             idx = 0
             while idx < len(PIPELINE):
+                if mission_id in self._cancel_requested:
+                    raise asyncio.CancelledError()
                 role = PIPELINE[idx]
                 mission = self.store.get(mission_id) or mission
+                if mission.status == MissionStatus.cancelled:
+                    raise asyncio.CancelledError()
                 mission.current_role = role
                 mission.status = MissionStatus.running
                 self.store.save(mission)
                 await self._emit(mission_id, "agent_started", {"role": role.value})
 
                 payload = await self._run_role(mission, role)
+                if mission_id in self._cancel_requested:
+                    raise asyncio.CancelledError()
                 artifacts = self._materialize_files(mission, role, payload)
                 message = AgentMessage(
                     role=role,
@@ -127,14 +149,26 @@ class Orchestrator:
                 idx += 1
 
             mission = self.store.get(mission_id) or mission
+            if mission_id in self._cancel_requested or mission.status == MissionStatus.cancelled:
+                raise asyncio.CancelledError()
             mission.status = MissionStatus.done
             mission.current_role = None
             self.store.save(mission)
             await self._emit(mission_id, "mission_done", {"status": "done", "bundle": mission.ship_bundle})
+        except asyncio.CancelledError:
+            mission = self.store.get(mission_id)
+            if mission is not None:
+                mission.status = MissionStatus.cancelled
+                mission.current_role = None
+                mission.error = mission.error or "Остановлено пользователем"
+                self.store.save(mission)
+                await self._emit(mission_id, "mission_cancelled", {"status": "cancelled"})
         except LLMError as exc:
             await self._fail(mission_id, str(exc))
         except Exception as exc:  # noqa: BLE001
             await self._fail(mission_id, f"Orchestrator crash: {exc}")
+        finally:
+            self._cancel_requested.discard(mission_id)
 
     async def _run_role(self, mission: Mission, role: AgentRole) -> dict[str, Any]:
         runner_name = "llm"

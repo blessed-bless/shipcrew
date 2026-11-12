@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import json
+import zipfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -9,7 +11,7 @@ from urllib.parse import urlencode
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.responses import RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
@@ -41,6 +43,7 @@ def create_app() -> FastAPI:
     oauth = OAuthManager()
     runners = RunnerService()
     orchestrator = Orchestrator(store, settings, connections, runners)
+    login_jobs: dict[str, dict[str, Any]] = {}
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -50,9 +53,10 @@ def create_app() -> FastAPI:
         app.state.runners = runners
         app.state.orchestrator = orchestrator
         app.state.settings = settings
+        app.state.login_jobs = login_jobs
         yield
 
-    app = FastAPI(title="ShipCrew", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="ShipCrew", version="0.2.0", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -181,7 +185,13 @@ def create_app() -> FastAPI:
 
     @app.get("/api/runners")
     def list_runners() -> list[dict[str, Any]]:
-        return [r.model_dump(mode="json") for r in runners.list_status()]
+        items = []
+        for r in runners.list_status():
+            row = r.model_dump(mode="json")
+            job = login_jobs.get(r.id.value)
+            row["login_job"] = job
+            items.append(row)
+        return items
 
     @app.post("/api/runners/{runner_id}/login")
     async def login_runner(runner_id: str) -> dict[str, Any]:
@@ -189,8 +199,32 @@ def create_app() -> FastAPI:
             rid = RunnerId(runner_id)
         except ValueError as exc:
             raise HTTPException(404, "unknown runner") from exc
-        result = await runners.login(rid)
-        return result.model_dump(mode="json")
+        existing = login_jobs.get(runner_id)
+        if existing and existing.get("status") == "running":
+            return {"ok": True, "started": False, "message": "login уже идёт", "job": existing}
+
+        login_jobs[runner_id] = {"status": "running", "message": "Открыли браузерный вход…", "ok": None}
+
+        async def _job() -> None:
+            try:
+                result = await runners.login(rid)
+                login_jobs[runner_id] = {
+                    "status": "done",
+                    "ok": result.ok,
+                    "message": result.message,
+                }
+            except Exception as exc:  # noqa: BLE001
+                login_jobs[runner_id] = {"status": "done", "ok": False, "message": str(exc)}
+
+        asyncio.create_task(_job())
+        return {"ok": True, "started": True, "message": "login запущен в фоне", "job": login_jobs[runner_id]}
+
+    @app.get("/api/runners/{runner_id}/login")
+    def login_runner_status(runner_id: str) -> dict[str, Any]:
+        job = login_jobs.get(runner_id)
+        if job is None:
+            return {"status": "idle"}
+        return job
 
     @app.post("/api/missions", response_model=Mission)
     def create_mission(body: MissionCreate) -> Mission:
@@ -227,6 +261,44 @@ def create_app() -> FastAPI:
             return mission
         return orchestrator.start(mission)
 
+    @app.post("/api/missions/{mission_id}/cancel", response_model=Mission)
+    async def cancel_mission(mission_id: str) -> Mission:
+        mission = orchestrator.cancel(mission_id)
+        if mission is None:
+            raise HTTPException(404, "mission not found")
+        return mission
+
+    @app.delete("/api/missions/{mission_id}")
+    def delete_mission(mission_id: str) -> dict[str, bool]:
+        mission = store.get(mission_id)
+        if mission is None:
+            raise HTTPException(404, "mission not found")
+        if mission.status == MissionStatus.running:
+            orchestrator.cancel(mission_id)
+        ok = store.delete(mission_id)
+        return {"ok": ok}
+
+    @app.get("/api/missions/{mission_id}/bundle.zip")
+    def download_bundle(mission_id: str) -> Response:
+        mission = store.get(mission_id)
+        if mission is None:
+            raise HTTPException(404, "mission not found")
+        root = store.artifact_root(mission_id)
+        if not root.exists():
+            raise HTTPException(404, "bundle empty")
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for path in root.rglob("*"):
+                if path.is_file():
+                    zf.write(path, arcname=str(path.relative_to(root)).replace("\\", "/"))
+        data = buf.getvalue()
+        filename = f"shipcrew-{mission_id[:8]}.zip"
+        return Response(
+            content=data,
+            media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
     @app.get("/api/missions/{mission_id}/events")
     async def mission_events(mission_id: str, request: Request) -> StreamingResponse:
         mission = store.get(mission_id)
@@ -249,7 +321,7 @@ def create_app() -> FastAPI:
                     try:
                         item = await asyncio.wait_for(queue.get(), timeout=15.0)
                         yield _sse(item)
-                        if item["type"] in {"mission_done", "mission_failed"}:
+                        if item["type"] in {"mission_done", "mission_failed", "mission_cancelled"}:
                             break
                     except asyncio.TimeoutError:
                         yield _sse({"type": "ping", "payload": {}})
@@ -267,7 +339,7 @@ def create_app() -> FastAPI:
         target = (root / artifact_path).resolve()
         if not str(target).startswith(str(root)) or not target.exists():
             raise HTTPException(404, "artifact not found")
-        return {"path": artifact_path, "content": target.read_text(encoding="utf-8")}
+        return {"path": artifact_path, "content": target.read_text(encoding="utf-8", errors="replace")}
 
     frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
     if frontend_dist.exists():

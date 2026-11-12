@@ -23,6 +23,7 @@ class MissionStatus(str, Enum):
     shipping = "shipping"
     done = "done"
     failed = "failed"
+    cancelled = "cancelled"
 
 
 class AgentRole(str, Enum):

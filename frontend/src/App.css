@@ -28,9 +28,143 @@ body {
 }
 
 .page {
-  width: min(1120px, calc(100% - 2rem));
+  width: min(1240px, calc(100% - 2rem));
   margin: 0 auto;
   padding: 2.5rem 0 4rem;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+.tabs button {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  padding: 0.55rem 0.9rem;
+  font-weight: 600;
+}
+
+.tabs button.active {
+  background: var(--ink);
+  color: #f7f3ea;
+}
+
+.banner {
+  margin: 0 0 0.85rem;
+}
+
+.setup {
+  display: grid;
+  gap: 1rem;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: 0.75fr 0.95fr 1.25fr;
+  gap: 1rem;
+}
+
+.history ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  max-height: 34rem;
+  overflow: auto;
+}
+
+.history li {
+  display: flex;
+  gap: 0.35rem;
+  align-items: stretch;
+}
+
+.history li.active .hist-btn {
+  border-color: var(--accent);
+}
+
+.hist-btn {
+  flex: 1;
+  text-align: left;
+  background: #fffdf9;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  padding: 0.55rem 0.65rem;
+}
+
+.hist-btn strong,
+.hist-btn span {
+  display: block;
+}
+
+.hist-btn span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+.two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+}
+
+.bullets {
+  margin: 0.4rem 0 0;
+  padding-left: 1.1rem;
+  color: var(--muted);
+}
+
+.art-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+button.tiny,
+.ghost.tiny {
+  padding: 0.28rem 0.45rem;
+  font-size: 0.78rem;
+}
+
+a.linkbtn {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+.preview {
+  margin-top: 1rem;
+  border-top: 1px dashed var(--line);
+  padding-top: 0.85rem;
+}
+
+.preview pre {
+  margin: 0;
+  max-height: 18rem;
+  overflow: auto;
+  background: #eef3f5;
+  padding: 0.75rem;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+}
+
+.artifacts {
+  margin-top: 1rem;
+  border-top: 1px dashed var(--line);
+  padding-top: 0.85rem;
+}
+
+.artifacts h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
 }
 
 .top {
@@ -156,7 +290,8 @@ label {
 }
 
 input,
-textarea {
+textarea,
+select {
   font: inherit;
   color: var(--ink);
   border: 1px solid var(--line);
@@ -372,7 +507,11 @@ button.ghost.danger {
   color: var(--accent);
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
   .top,
   .grid {
     grid-template-columns: 1fr;
@@ -383,7 +522,8 @@ button.ghost.danger {
     grid-template-columns: 1fr 1fr;
   }
 
-  .key-form {
+  .key-form,
+  .two {
     grid-template-columns: 1fr;
   }
 }

@@ -52,6 +52,22 @@ class MissionStore:
     def artifact_root(self, mission_id: str) -> Path:
         return self.artifacts_dir / mission_id
 
+    def delete(self, mission_id: str) -> bool:
+        import shutil
+
+        with self._lock:
+            self._hydrate()
+            path = self.missions_dir / f"{mission_id}.json"
+            if mission_id not in self._cache and not path.exists():
+                return False
+            self._cache.pop(mission_id, None)
+            if path.exists():
+                path.unlink()
+            art = self.artifacts_dir / mission_id
+            if art.exists():
+                shutil.rmtree(art, ignore_errors=True)
+            return True
+
     def _hydrate(self) -> None:
         if self._cache:
             return
