@@ -1,0 +1,19 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8787:8787"
+    environment:
+      SHIPCREW_DEMO_MODE: "true"
+      SHIPCREW_DATA_DIR: /data
+      SHIPCREW_HOST: 0.0.0.0
+      SHIPCREW_PORT: "8787"
+      SHIPCREW_FRONTEND_URL: http://127.0.0.1:8787
+      SHIPCREW_PUBLIC_BASE_URL: http://127.0.0.1:8787
+    volumes:
+      - shipcrew-data:/data
+
+volumes:
+  shipcrew-data:

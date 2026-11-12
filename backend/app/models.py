@@ -58,6 +58,8 @@ class MissionCreate(BaseModel):
     # llm | codex | claude | cursor — подписочные CLI/SDK вместо HTTP API
     engineer_runner: str = "llm"
     reviewer_runner: str = "llm"
+    template_id: str = "greenfield-saas"
+    project_id: str | None = None
 
 
 class Mission(BaseModel):
@@ -68,11 +70,14 @@ class Mission(BaseModel):
     stack_hint: str = "Python FastAPI + React"
     engineer_runner: str = "llm"
     reviewer_runner: str = "llm"
+    template_id: str = "greenfield-saas"
+    project_id: str | None = None
     status: MissionStatus = MissionStatus.queued
     current_role: AgentRole | None = None
     review_round: int = 0
     messages: list[AgentMessage] = Field(default_factory=list)
     artifacts: list[Artifact] = Field(default_factory=list)
+    blackboard: dict[str, Any] = Field(default_factory=dict)
     ship_bundle: str | None = None
     error: str | None = None
     created_at: datetime = Field(default_factory=utc_now)

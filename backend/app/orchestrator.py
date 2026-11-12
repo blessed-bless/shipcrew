@@ -8,6 +8,8 @@ from typing import Any
 from .agents import PIPELINE, run_agent
 from .config import Settings
 from .connections import ConnectionStore
+from .domain.blackboard import Blackboard, ingest_agent_payload
+from .domain.validators import normalize_payload
 from .llm import LLMClient, LLMError
 from .models import AgentMessage, AgentRole, Mission, MissionStatus
 from .runners import RunnerService
@@ -94,6 +96,11 @@ class Orchestrator:
         if mission is None:
             return
         try:
+            board = (
+                Blackboard.model_validate(mission.blackboard)
+                if mission.blackboard
+                else Blackboard(mission_id=mission_id)
+            )
             await self._emit(mission_id, "mission_started", {"status": mission.status.value})
             idx = 0
             while idx < len(PIPELINE):
@@ -106,11 +113,13 @@ class Orchestrator:
                 mission.current_role = role
                 mission.status = MissionStatus.running
                 self.store.save(mission)
-                await self._emit(mission_id, "agent_started", {"role": role.value})
+                await self._emit(mission_id, "agent_started", {"role": role.value, "template_id": mission.template_id})
 
-                payload = await self._run_role(mission, role)
+                payload = normalize_payload(role.value, await self._run_role(mission, role, board))
                 if mission_id in self._cancel_requested:
                     raise asyncio.CancelledError()
+                ingest_agent_payload(board, role.value, payload)
+                mission.blackboard = board.model_dump(mode="json")
                 artifacts = self._materialize_files(mission, role, payload)
                 message = AgentMessage(
                     role=role,
@@ -170,7 +179,7 @@ class Orchestrator:
         finally:
             self._cancel_requested.discard(mission_id)
 
-    async def _run_role(self, mission: Mission, role: AgentRole) -> dict[str, Any]:
+    async def _run_role(self, mission: Mission, role: AgentRole, board: Blackboard) -> dict[str, Any]:
         runner_name = "llm"
         if role == AgentRole.engineer:
             runner_name = (mission.engineer_runner or "llm").strip().lower()
@@ -180,6 +189,8 @@ class Orchestrator:
         if runner_name in {r.value for r in RunnerId}:
             workdir = self.store.artifact_root(mission.id) / "workspace"
             workdir.mkdir(parents=True, exist_ok=True)
+            # Runners get blackboard digest through prompt assembly in RunnerService via mission context.
+            mission.blackboard = board.model_dump(mode="json")
             return await self.runners.run_role(
                 RunnerId(runner_name),
                 mission,
@@ -187,7 +198,7 @@ class Orchestrator:
                 workdir,
                 timeout_s=self.settings.runner_timeout_s,
             )
-        return await run_agent(self.llm, mission, role)
+        return await run_agent(self.llm, mission, role, board)
 
     async def _fail(self, mission_id: str, error: str) -> None:
         mission = self.store.get(mission_id)

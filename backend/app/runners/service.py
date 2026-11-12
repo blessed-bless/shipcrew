@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ..agents import AGENTS
+from ..agents import resolve_agent
+from ..domain.blackboard import Blackboard
 from ..llm import parse_json_payload
 from ..models import AgentRole, Mission
 from . import claude_runner, codex_runner, cursor_runner
@@ -38,14 +39,17 @@ class RunnerService:
         *,
         timeout_s: float = 600.0,
     ) -> dict:
-        spec = AGENTS[role]
+        spec = resolve_agent(mission, role)
+        board = Blackboard.model_validate(mission.blackboard) if mission.blackboard else Blackboard(mission_id=mission.id)
         prompt = (
             f"{spec.system}\n\n"
             f"TITLE: {mission.title}\n"
             f"GOAL: {mission.goal}\n"
             f"CONSTRAINTS: {mission.constraints or '-'}\n"
             f"STACK: {mission.stack_hint}\n"
+            f"TEMPLATE: {mission.template_id}\n"
             f"WORKDIR: {workdir}\n\n"
+            f"BLACKBOARD:\n{board.digest()}\n\n"
             "Write any files into the working directory. "
             "Prefer a short final answer. If possible end with JSON matching the role schema."
         )

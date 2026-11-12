@@ -25,11 +25,17 @@ from .connections import (
     ProviderKind,
     catalog_entry,
 )
+from .domain.capabilities import capabilities_by_area, list_capabilities
+from .domain.projects import Project, ProjectCreate, ProjectSummary
+from .domain.templates import get_template, list_templates
 from .models import Mission, MissionCreate, MissionStatus, MissionSummary
 from .oauth import OAuthError, OAuthManager
 from .orchestrator import Orchestrator
+from .persistence.project_store import ProjectStore
 from .runners import RunnerService
 from .runners.types import RunnerId
+from .services.event_log import EventLog
+from .services.metrics import mission_metrics
 from .storage import MissionStore
 
 
@@ -39,24 +45,28 @@ def create_app() -> FastAPI:
     if not data_dir.is_absolute():
         data_dir = Path(__file__).resolve().parents[1] / data_dir
     store = MissionStore(data_dir)
+    projects = ProjectStore(data_dir)
     connections = ConnectionStore(data_dir)
     oauth = OAuthManager()
     runners = RunnerService()
     orchestrator = Orchestrator(store, settings, connections, runners)
+    events = EventLog(data_dir)
     login_jobs: dict[str, dict[str, Any]] = {}
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         app.state.store = store
+        app.state.projects = projects
         app.state.connections = connections
         app.state.oauth = oauth
         app.state.runners = runners
         app.state.orchestrator = orchestrator
+        app.state.events = events
         app.state.settings = settings
         app.state.login_jobs = login_jobs
         yield
 
-    app = FastAPI(title="ShipCrew", version="0.2.0", lifespan=lifespan)
+    app = FastAPI(title="ShipCrew", version="0.3.0", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -81,6 +91,78 @@ def create_app() -> FastAPI:
         from .agents import AGENTS, PIPELINE
 
         return [{"role": role.value, "title": AGENTS[role].title} for role in PIPELINE]
+
+    @app.get("/api/templates")
+    def templates() -> list[dict[str, Any]]:
+        return [t.model_dump(mode="json") for t in list_templates()]
+
+    @app.get("/api/templates/{template_id}")
+    def template_detail(template_id: str) -> dict[str, Any]:
+        item = get_template(template_id)
+        if item is None:
+            raise HTTPException(404, "template not found")
+        return item.model_dump(mode="json")
+
+    @app.get("/api/metrics")
+    def metrics() -> dict[str, Any]:
+        return mission_metrics(store.list_missions())
+
+    @app.get("/api/capabilities")
+    def capabilities() -> dict[str, Any]:
+        items = [c.model_dump(mode="json") for c in list_capabilities()]
+        return {
+            "count": len(items),
+            "items": items,
+            "by_area": {
+                area: [c.model_dump(mode="json") for c in caps]
+                for area, caps in capabilities_by_area().items()
+            },
+        }
+
+    @app.get("/api/events")
+    def list_events(limit: int = 100, mission_id: str | None = None) -> list[dict[str, Any]]:
+        return events.tail(limit=min(max(limit, 1), 500), mission_id=mission_id)
+
+    @app.get("/api/projects", response_model=list[ProjectSummary])
+    def list_projects() -> list[ProjectSummary]:
+        return [
+            ProjectSummary(
+                id=p.id,
+                name=p.name,
+                description=p.description,
+                default_template_id=p.default_template_id,
+                mission_count=len(p.mission_ids),
+                updated_at=p.updated_at,
+            )
+            for p in projects.list()
+        ]
+
+    @app.post("/api/projects", response_model=Project)
+    def create_project(body: ProjectCreate) -> Project:
+        if not body.name.strip():
+            raise HTTPException(400, "name required")
+        if get_template(body.default_template_id) is None:
+            raise HTTPException(400, "unknown template")
+        project = Project(
+            name=body.name.strip(),
+            description=body.description.strip(),
+            default_template_id=body.default_template_id,
+            default_stack=body.default_stack.strip() or "Python FastAPI + React",
+        )
+        return projects.save(project)
+
+    @app.get("/api/projects/{project_id}", response_model=Project)
+    def get_project(project_id: str) -> Project:
+        project = projects.get(project_id)
+        if project is None:
+            raise HTTPException(404, "project not found")
+        return project
+
+    @app.delete("/api/projects/{project_id}")
+    def delete_project(project_id: str) -> dict[str, bool]:
+        if not projects.delete(project_id):
+            raise HTTPException(404, "project not found")
+        return {"ok": True}
 
     @app.get("/api/providers")
     def providers() -> list[dict[str, Any]]:
@@ -231,8 +313,13 @@ def create_app() -> FastAPI:
         allowed = {"llm", "codex", "claude", "cursor"}
         engineer = (body.engineer_runner or "llm").strip().lower()
         reviewer = (body.reviewer_runner or "llm").strip().lower()
+        template_id = (body.template_id or "greenfield-saas").strip()
         if engineer not in allowed or reviewer not in allowed:
             raise HTTPException(400, "engineer_runner/reviewer_runner must be llm|codex|claude|cursor")
+        if get_template(template_id) is None:
+            raise HTTPException(400, "unknown template_id")
+        if body.project_id and projects.get(body.project_id) is None:
+            raise HTTPException(400, "unknown project_id")
         mission = Mission(
             title=body.title.strip(),
             goal=body.goal.strip(),
@@ -240,10 +327,16 @@ def create_app() -> FastAPI:
             stack_hint=body.stack_hint.strip() or "Python FastAPI + React",
             engineer_runner=engineer,
             reviewer_runner=reviewer,
+            template_id=template_id,
+            project_id=body.project_id,
         )
         if not mission.title or not mission.goal:
             raise HTTPException(400, "title and goal are required")
-        return store.save(mission)
+        saved = store.save(mission)
+        if body.project_id:
+            projects.attach_mission(body.project_id, saved.id)
+        events.emit("mission_created", mission_id=saved.id, payload={"title": saved.title, "template_id": saved.template_id})
+        return saved
 
     @app.get("/api/missions/{mission_id}", response_model=Mission)
     def get_mission(mission_id: str) -> Mission:
@@ -259,7 +352,9 @@ def create_app() -> FastAPI:
             raise HTTPException(404, "mission not found")
         if mission.status == MissionStatus.running:
             return mission
-        return orchestrator.start(mission)
+        started = orchestrator.start(mission)
+        events.emit("mission_started", mission_id=mission_id, payload={"status": started.status.value})
+        return started
 
     @app.post("/api/missions/{mission_id}/cancel", response_model=Mission)
     async def cancel_mission(mission_id: str) -> Mission:

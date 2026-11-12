@@ -1,70 +1,51 @@
 # ShipCrew
 
-ИИ-команда доводит задачу до prod-ready бандла: PM → Architect → Engineer → Reviewer → DevOps.
+Мультиагентная платформа доведения задач до prod-ready бандла.
 
-## Возможности
+Роли: **PM → Architect → Engineer → Reviewer → DevOps**  
+Фичи: проекты, шаблоны команд, shared blackboard, OpenRouter OAuth, Codex/Claude/Cursor runners, metrics, zip ship bundle.
 
-- Миссии с историей, отменой и удалением
-- Лента агентов + просмотр артефактов
-- Скачивание ship-бандла (`bundle.zip`)
-- OpenRouter OAuth (браузер) и API-ключи
-- Подписки через официальные CLI/SDK: Codex, Claude Code, Cursor Agent
-- Demo mode без ключей для локальной проверки пайплайна
-
-## Быстрый старт (Windows)
+## Быстрый старт
 
 ```powershell
 .\scripts\dev.ps1
 ```
 
-Или вручную:
+Или Docker:
 
 ```bash
-cd backend
-python -m venv .venv
-.\.venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8787
+docker compose up --build
 ```
 
-```bash
-cd frontend
-npm install
-npm run dev
+- UI: http://127.0.0.1:5173 (dev) / http://127.0.0.1:8787 (compose)
+- API health: http://127.0.0.1:8787/api/health
+
+## Структура
+
+```
+backend/app/
+  domain/        templates, blackboard, projects, capabilities, validators
+  persistence/   project store
+  services/      metrics
+  runners/       codex/claude/cursor adapters
+  ...
+frontend/src/
+  components/    Header, Tabs, Setup, Insights, Feed...
+  api.ts types.ts App.tsx
+docs/            architecture, api, runners
 ```
 
-- UI: http://127.0.0.1:5173  
-- API: http://127.0.0.1:8787/api/health  
+## Документация
 
-## Подключения
-
-1. Вкладка **Подключения** → OpenRouter (браузер) или API-ключ.
-2. Для подписок: установи `codex` / `claude`, для Cursor — `cd tools/cursor-runner && npm install`, затем **Войти**.
-3. В миссии выбери Engineer/Reviewer: `LLM` | `Codex` | `Claude` | `Cursor`.
-
-Claude Code / Claude.ai subscription OAuth в сторонние приложения Anthropic запрещает. ShipCrew запускает официальный `claude` CLI или идёт через OpenRouter/API key.
-
-## Env
-
-Скопируй `.env.example` → `backend/.env` или корень:
-
-| Переменная | Смысл |
-|---|---|
-| `SHIPCREW_DEMO_MODE` | `true` — демо без внешнего LLM |
-| `SHIPCREW_LLM_*` | fallback OpenAI-compatible |
-| `SHIPCREW_FRONTEND_URL` | куда вернуть после OAuth |
-| `SHIPCREW_PUBLIC_BASE_URL` | callback origin бэкенда |
+- [Architecture](docs/architecture.md)
+- [HTTP API](docs/api.md)
+- [Runners](docs/runners.md)
 
 ## Проверки
 
 ```bash
-cd backend
-pytest -q
-```
-
-```bash
-cd frontend
-npm run build
+cd backend && pytest -q
+cd frontend && npm run build
 ```
 
 ## Автор
