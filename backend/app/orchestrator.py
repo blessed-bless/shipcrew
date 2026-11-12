@@ -9,11 +9,14 @@ from .agents import PIPELINE, run_agent
 from .config import Settings
 from .connections import ConnectionStore
 from .domain.blackboard import Blackboard, ingest_agent_payload
-from .domain.validators import normalize_payload
+from .domain.validators import normalize_payload, validate_agent_payload
 from .llm import LLMClient, LLMError
 from .models import AgentMessage, AgentRole, Mission, MissionStatus
+from .persistence.sqlite import SqliteIndex
 from .runners import RunnerService
 from .runners.types import RunnerId
+from .schemas.agent_outputs import coerce_role_payload
+from .services.event_log import EventLog
 from .storage import MissionStore
 
 EventCallback = Callable[[str, dict[str, Any]], Awaitable[None] | None]
@@ -26,11 +29,15 @@ class Orchestrator:
         settings: Settings,
         connections: ConnectionStore | None = None,
         runners: RunnerService | None = None,
+        events: EventLog | None = None,
+        sqlite: SqliteIndex | None = None,
     ) -> None:
         self.store = store
         self.settings = settings
         self.connections = connections
         self.runners = runners or RunnerService()
+        self.events = events
+        self.sqlite = sqlite
         self.llm = self._build_llm()
         self._tasks: dict[str, asyncio.Task] = {}
         self._listeners: dict[str, list[EventCallback]] = {}
@@ -61,10 +68,18 @@ class Orchestrator:
             listeners.remove(callback)
 
     async def _emit(self, mission_id: str, event_type: str, payload: dict[str, Any]) -> None:
+        if self.events is not None:
+            self.events.emit(event_type, mission_id=mission_id, payload=payload)
         for cb in list(self._listeners.get(mission_id, [])):
             result = cb(event_type, payload)
             if asyncio.iscoroutine(result):
                 await result
+
+    def _persist(self, mission: Mission) -> Mission:
+        saved = self.store.save(mission)
+        if self.sqlite is not None:
+            self.sqlite.upsert_mission(saved)
+        return saved
 
     def start(self, mission: Mission) -> Mission:
         if mission.id in self._tasks and not self._tasks[mission.id].done():
@@ -73,7 +88,7 @@ class Orchestrator:
         self._cancel_requested.discard(mission.id)
         mission.status = MissionStatus.running
         mission.error = None
-        self.store.save(mission)
+        self._persist(mission)
         self._tasks[mission.id] = asyncio.create_task(self._run(mission.id))
         return mission
 
@@ -88,7 +103,7 @@ class Orchestrator:
         mission.status = MissionStatus.cancelled
         mission.current_role = None
         mission.error = "Остановлено пользователем"
-        self.store.save(mission)
+        self._persist(mission)
         return mission
 
     async def _run(self, mission_id: str) -> None:
@@ -112,10 +127,12 @@ class Orchestrator:
                     raise asyncio.CancelledError()
                 mission.current_role = role
                 mission.status = MissionStatus.running
-                self.store.save(mission)
+                self._persist(mission)
                 await self._emit(mission_id, "agent_started", {"role": role.value, "template_id": mission.template_id})
 
-                payload = normalize_payload(role.value, await self._run_role(mission, role, board))
+                raw = await self._run_role(mission, role, board)
+                payload = coerce_role_payload(role.value, normalize_payload(role.value, raw))
+                issues = validate_agent_payload(role.value, payload)
                 if mission_id in self._cancel_requested:
                     raise asyncio.CancelledError()
                 ingest_agent_payload(board, role.value, payload)
@@ -128,7 +145,7 @@ class Orchestrator:
                 )
                 mission.messages.append(message)
                 mission.artifacts.extend(artifacts)
-                self.store.save(mission)
+                self._persist(mission)
                 await self._emit(
                     mission_id,
                     "agent_finished",
@@ -137,6 +154,7 @@ class Orchestrator:
                         "message_id": message.id,
                         "artifact_paths": message.artifact_paths,
                         "summary": payload.get("summary", ""),
+                        "schema_issues": issues,
                     },
                 )
 
@@ -145,14 +163,19 @@ class Orchestrator:
                     fixes = payload.get("required_fixes") or []
                     if not approved and fixes and mission.review_round < self.settings.max_review_rounds:
                         mission.review_round += 1
-                        self.store.save(mission)
+                        self._persist(mission)
+                        await self._emit(
+                            mission_id,
+                            "review_retry",
+                            {"round": mission.review_round, "fixes": fixes},
+                        )
                         idx = PIPELINE.index(AgentRole.engineer)
                         continue
 
                 if role == AgentRole.devops:
                     mission.status = MissionStatus.shipping
                     mission.ship_bundle = str(self.store.artifact_root(mission.id))
-                    self.store.save(mission)
+                    self._persist(mission)
                     await self._emit(mission_id, "shipping", {"bundle": mission.ship_bundle})
 
                 idx += 1
@@ -162,7 +185,7 @@ class Orchestrator:
                 raise asyncio.CancelledError()
             mission.status = MissionStatus.done
             mission.current_role = None
-            self.store.save(mission)
+            self._persist(mission)
             await self._emit(mission_id, "mission_done", {"status": "done", "bundle": mission.ship_bundle})
         except asyncio.CancelledError:
             mission = self.store.get(mission_id)
@@ -170,7 +193,7 @@ class Orchestrator:
                 mission.status = MissionStatus.cancelled
                 mission.current_role = None
                 mission.error = mission.error or "Остановлено пользователем"
-                self.store.save(mission)
+                self._persist(mission)
                 await self._emit(mission_id, "mission_cancelled", {"status": "cancelled"})
         except LLMError as exc:
             await self._fail(mission_id, str(exc))
@@ -207,7 +230,7 @@ class Orchestrator:
         mission.status = MissionStatus.failed
         mission.error = error
         mission.current_role = None
-        self.store.save(mission)
+        self._persist(mission)
         await self._emit(mission_id, "mission_failed", {"error": error})
 
     def _materialize_files(self, mission: Mission, role: AgentRole, payload: dict[str, Any]) -> list:

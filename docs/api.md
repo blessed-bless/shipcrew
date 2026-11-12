@@ -2,15 +2,19 @@
 
 Base: `http://127.0.0.1:8787`
 
+Все маршруты доступны и под `/api/...`, и под `/api/v1/...` (один и тот же router).
+
 ## Health & catalog
 
-- `GET /api/health`
+- `GET /api/health` — `ok`, demo/live, model, active provider; поле `api: "v1"`
 - `GET /api/crew`
 - `GET /api/providers`
 - `GET /api/templates`
 - `GET /api/templates/{id}`
 - `GET /api/capabilities`
 - `GET /api/metrics`
+- `GET /api/events?limit=&mission_id=`
+- `GET /api/index/missions` — SQLite-индекс саммари миссий
 
 ## Projects
 
@@ -60,3 +64,7 @@ Base: `http://127.0.0.1:8787`
   "reviewer_runner": "llm"
 }
 ```
+
+## SSE event types
+
+`snapshot`, `mission_started`, `agent_started`, `agent_finished`, `review_retry`, `shipping`, `mission_done`, `mission_failed`, `mission_cancelled`, `ping`

@@ -24,14 +24,17 @@ docker compose up --build
 
 ```
 backend/app/
+  api/           routers v1 (missions, connections, runners, …)
+  factory.py     app factory + middleware
   domain/        templates, blackboard, projects, capabilities, validators
-  persistence/   project store
-  services/      metrics
+  persistence/   project store + SQLite index
+  services/      metrics, event log
   runners/       codex/claude/cursor adapters
-  ...
+  schemas/       agent output coerce
 frontend/src/
-  components/    Header, Tabs, Setup, Insights, Feed...
-  api.ts types.ts App.tsx
+  pages/         Mission / Setup / Insights (React Router)
+  components/    Header, Nav, Setup, Insights, Feed
+  hooks/         useShipCrewData, usePolling
 docs/            architecture, api, runners
 ```
 

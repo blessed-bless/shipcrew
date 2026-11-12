@@ -2,12 +2,21 @@
 
 ## Layers
 
-1. **API** (`backend/app/main.py`) — HTTP surface for missions, connections, runners, projects, templates, metrics.
-2. **Orchestration** (`orchestrator.py`) — pipeline loop, cancel, artifact materialization, blackboard updates.
-3. **Domain** (`domain/`) — templates/playbooks, blackboard, projects, capabilities catalog.
-4. **Adapters** — LLM client, OpenRouter OAuth, subscription runners (Codex/Claude/Cursor).
-5. **Persistence** — JSON stores under `SHIPCREW_DATA_DIR` for missions/connections/projects.
-6. **UI** (`frontend/src`) — React panels for missions/setup/insights.
+1. **API** (`backend/app/api/`) — routers v1 (`health`, `missions`, `connections`, `runners`, `projects`, `templates`, `index`), собираются в `factory.create_app`.
+2. **Runtime** (`runtime/state.py`) — единый `AppState` на lifespan.
+3. **Orchestration** (`orchestrator.py`) — pipeline, cancel, coerce schema, event log + SQLite sync.
+4. **Domain** (`domain/`) — templates/playbooks, blackboard, projects, capabilities, validators.
+5. **Adapters** — LLM client, OpenRouter OAuth, subscription runners (Codex/Claude/Cursor).
+6. **Persistence** — JSON mission bodies + `shipcrew.db` (SQLite index) + event JSONL under `SHIPCREW_DATA_DIR`.
+7. **UI** (`frontend/src`) — React Router pages: `/`, `/missions/:id`, `/setup`, `/insights`.
+
+## HTTP stack
+
+```
+RequestContextMiddleware → CORS → /api|/api/v1 → routers → AppState
+```
+
+Каждый запрос получает `X-Request-ID` и пишется в лог `shipcrew.http`.
 
 ## Mission lifecycle
 
@@ -16,6 +25,8 @@ create → run → [pm → architect → engineer → reviewer → devops] → d
                      ↑_______________rework_________________|
 cancel can interrupt between roles
 ```
+
+После каждого шага payload прогоняется через `normalize_payload` + `coerce_role_payload` (Pydantic schemas в `schemas/agent_outputs.py`). Issues валидации уходят в SSE `agent_finished.schema_issues`.
 
 ## Blackboard
 

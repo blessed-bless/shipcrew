@@ -39,15 +39,19 @@ body {
   margin-bottom: 1rem;
 }
 
-.tabs button {
+.tabs button,
+.tabs a {
   background: transparent;
   color: var(--ink);
   border: 1px solid var(--line);
   padding: 0.55rem 0.9rem;
   font-weight: 600;
+  text-decoration: none;
+  display: inline-block;
 }
 
-.tabs button.active {
+.tabs button.active,
+.tabs a.active {
   background: var(--ink);
   color: #f7f3ea;
 }

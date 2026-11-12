@@ -12,9 +12,10 @@ ShipCrew is a local-first control plane for an AI shipping crew.
 
 1. Pick template + optional project
 2. Connect LLM (OpenRouter/API) and/or subscription runners
-3. Launch mission
-4. Watch role feed + blackboard decisions
+3. Launch mission (`/` or `/missions/:id` in UI)
+4. Watch role feed + blackboard decisions (SSE + JSONL event log)
 5. Download zip / re-run / cancel
+6. Browse SQLite mission index / metrics in Insights
 
 ## Non-goals (for now)
 
