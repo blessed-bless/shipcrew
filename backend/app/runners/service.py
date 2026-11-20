@@ -40,7 +40,11 @@ class RunnerService:
         timeout_s: float = 600.0,
     ) -> dict:
         spec = resolve_agent(mission, role)
-        board = Blackboard.model_validate(mission.blackboard) if mission.blackboard else Blackboard(mission_id=mission.id)
+        board = (
+            Blackboard.model_validate(mission.blackboard)
+            if mission.blackboard
+            else Blackboard(mission_id=mission.id)
+        )
         prompt = (
             f"{spec.system}\n\n"
             f"TITLE: {mission.title}\n"
@@ -55,7 +59,11 @@ class RunnerService:
         )
         result = await self._exec(runner_id, prompt, workdir, timeout_s=timeout_s)
         payload = parse_json_payload(result.summary)
-        if "summary" not in payload or payload.get("summary") == result.summary and "raw" in payload:
+        if (
+            "summary" not in payload
+            or payload.get("summary") == result.summary
+            and "raw" in payload
+        ):
             payload = {
                 "summary": result.summary[:2000] or f"{runner_id.value} finished",
                 "runner": runner_id.value,
@@ -69,7 +77,7 @@ class RunnerService:
             payload.setdefault("files_touched", result.files_written)
             payload.setdefault("ok", result.ok)
 
-        # Подтягиваем файлы, которые CLI реально положил на диск, если JSON files{} пуст.
+        # Pull files the CLI wrote to disk when JSON files{} is empty.
         files = payload.get("files")
         if not isinstance(files, dict):
             files = {}
@@ -85,10 +93,14 @@ class RunnerService:
         if files:
             payload["files"] = files
         if not result.ok and not payload.get("summary"):
-            payload["summary"] = f"{runner_id.value} failed: {result.stderr[-500:] or result.stdout[-500:]}"
+            payload["summary"] = (
+                f"{runner_id.value} failed: {result.stderr[-500:] or result.stdout[-500:]}"
+            )
         return payload
 
-    async def _exec(self, runner_id: RunnerId, prompt: str, workdir: Path, *, timeout_s: float) -> RunnerExecResult:
+    async def _exec(
+        self, runner_id: RunnerId, prompt: str, workdir: Path, *, timeout_s: float
+    ) -> RunnerExecResult:
         if runner_id == RunnerId.codex:
             return await codex_runner.run(prompt, workdir, timeout_s=timeout_s)
         if runner_id == RunnerId.claude:

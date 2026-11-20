@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 REQUIRED_BY_ROLE: dict[str, set[str]] = {
     "pm": {"summary", "milestones", "acceptance"},
     "architect": {"summary", "components", "files"},

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 from uuid import uuid4
@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 
 def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def new_id() -> str:
@@ -55,7 +55,7 @@ class MissionCreate(BaseModel):
     goal: str
     constraints: str = ""
     stack_hint: str = "Python FastAPI + React"
-    # llm | codex | claude | cursor — подписочные CLI/SDK вместо HTTP API
+    # llm | codex | claude | cursor — subscription CLI/SDK instead of HTTP API
     engineer_runner: str = "llm"
     reviewer_runner: str = "llm"
     template_id: str = "greenfield-saas"

@@ -4,7 +4,7 @@ import base64
 import hashlib
 import secrets
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from threading import Lock
 from urllib.parse import urlencode
 
@@ -60,7 +60,7 @@ class OAuthManager:
             code_verifier=verifier,
             callback_url=callback_url,
             frontend_redirect=frontend_redirect,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             model=model or (catalog_entry("openrouter") or {}).get("default_model", ""),
             label=label,
         )
@@ -100,7 +100,9 @@ class OAuthManager:
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post("https://openrouter.ai/api/v1/auth/keys", json=body)
             if resp.status_code >= 400:
-                raise OAuthError(f"OpenRouter отказал в обмене кода: {resp.status_code} {resp.text[:300]}")
+                raise OAuthError(
+                    f"OpenRouter отказал в обмене кода: {resp.status_code} {resp.text[:300]}"
+                )
             data = resp.json()
         key = data.get("key")
         if not key:
@@ -127,7 +129,7 @@ class OAuthManager:
         return store.upsert(record, make_active=True)
 
     def _purge_locked(self) -> None:
-        cutoff = datetime.now(timezone.utc) - timedelta(minutes=15)
+        cutoff = datetime.now(UTC) - timedelta(minutes=15)
         stale = [k for k, v in self._pending.items() if v.created_at < cutoff]
         for key in stale:
             del self._pending[key]

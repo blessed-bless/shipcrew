@@ -128,7 +128,11 @@ class Orchestrator:
                 mission.current_role = role
                 mission.status = MissionStatus.running
                 self._persist(mission)
-                await self._emit(mission_id, "agent_started", {"role": role.value, "template_id": mission.template_id})
+                await self._emit(
+                    mission_id,
+                    "agent_started",
+                    {"role": role.value, "template_id": mission.template_id},
+                )
 
                 raw = await self._run_role(mission, role, board)
                 payload = coerce_role_payload(role.value, normalize_payload(role.value, raw))
@@ -161,7 +165,11 @@ class Orchestrator:
                 if role == AgentRole.reviewer:
                     approved = bool(payload.get("approved", True))
                     fixes = payload.get("required_fixes") or []
-                    if not approved and fixes and mission.review_round < self.settings.max_review_rounds:
+                    if (
+                        not approved
+                        and fixes
+                        and mission.review_round < self.settings.max_review_rounds
+                    ):
                         mission.review_round += 1
                         self._persist(mission)
                         await self._emit(
@@ -186,7 +194,9 @@ class Orchestrator:
             mission.status = MissionStatus.done
             mission.current_role = None
             self._persist(mission)
-            await self._emit(mission_id, "mission_done", {"status": "done", "bundle": mission.ship_bundle})
+            await self._emit(
+                mission_id, "mission_done", {"status": "done", "bundle": mission.ship_bundle}
+            )
         except asyncio.CancelledError:
             mission = self.store.get(mission_id)
             if mission is not None:
@@ -202,7 +212,9 @@ class Orchestrator:
         finally:
             self._cancel_requested.discard(mission_id)
 
-    async def _run_role(self, mission: Mission, role: AgentRole, board: Blackboard) -> dict[str, Any]:
+    async def _run_role(
+        self, mission: Mission, role: AgentRole, board: Blackboard
+    ) -> dict[str, Any]:
         runner_name = "llm"
         if role == AgentRole.engineer:
             runner_name = (mission.engineer_runner or "llm").strip().lower()
@@ -233,7 +245,9 @@ class Orchestrator:
         self._persist(mission)
         await self._emit(mission_id, "mission_failed", {"error": error})
 
-    def _materialize_files(self, mission: Mission, role: AgentRole, payload: dict[str, Any]) -> list:
+    def _materialize_files(
+        self, mission: Mission, role: AgentRole, payload: dict[str, Any]
+    ) -> list:
         files = payload.get("files")
         if not isinstance(files, dict):
             # Persist the agent JSON as a report artifact so every step leaves a trail.
@@ -251,7 +265,11 @@ class Orchestrator:
         for path, content in files.items():
             if not isinstance(path, str):
                 continue
-            text = content if isinstance(content, str) else json.dumps(content, ensure_ascii=False, indent=2)
+            text = (
+                content
+                if isinstance(content, str)
+                else json.dumps(content, ensure_ascii=False, indent=2)
+            )
             kind = "code"
             lower = path.lower()
             if lower.endswith((".md", ".txt")):

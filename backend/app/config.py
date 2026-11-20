@@ -16,9 +16,9 @@ class Settings(BaseSettings):
     port: int = 8787
     max_review_rounds: int = 2
     request_timeout_s: float = 120.0
-    # Куда вернуть пользователя после OAuth (Vite dev или собранный UI).
+    # Where to send the user after OAuth (Vite dev or built UI).
     frontend_url: str = "http://127.0.0.1:5173"
-    # Публичный origin бэкенда для callback_url OpenRouter.
+    # Public API origin used as OpenRouter callback_url.
     public_base_url: str = "http://127.0.0.1:8787"
     runner_timeout_s: float = 600.0
 

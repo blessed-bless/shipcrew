@@ -46,7 +46,9 @@ class SqliteIndex:
         summary = {
             "id": mission.id,
             "title": mission.title,
-            "status": mission.status.value if hasattr(mission.status, "value") else str(mission.status),
+            "status": mission.status.value
+            if hasattr(mission.status, "value")
+            else str(mission.status),
             "current_role": mission.current_role.value if mission.current_role else None,
             "artifact_count": len(mission.artifacts),
             "template_id": mission.template_id,
@@ -74,8 +76,12 @@ class SqliteIndex:
                 mission.template_id,
                 mission.project_id,
                 len(mission.artifacts),
-                mission.created_at.isoformat() if hasattr(mission.created_at, "isoformat") else str(mission.created_at),
-                mission.updated_at.isoformat() if hasattr(mission.updated_at, "isoformat") else str(mission.updated_at),
+                mission.created_at.isoformat()
+                if hasattr(mission.created_at, "isoformat")
+                else str(mission.created_at),
+                mission.updated_at.isoformat()
+                if hasattr(mission.updated_at, "isoformat")
+                else str(mission.updated_at),
                 json.dumps(summary, ensure_ascii=False),
             ),
         )

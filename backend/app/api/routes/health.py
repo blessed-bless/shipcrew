@@ -5,9 +5,9 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query
 
 from ...domain.capabilities import capabilities_by_area, list_capabilities
+from ...runtime.state import AppState
 from ...services.metrics import mission_metrics
 from ..deps import get_state
-from ...runtime.state import AppState
 
 router = APIRouter(tags=["system"])
 

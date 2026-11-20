@@ -35,7 +35,9 @@ class MissionStore:
             self._cache[mission.id] = mission
             return mission
 
-    def write_artifact(self, mission_id: str, relative_path: str, content: str, *, kind: str, created_by) -> Artifact:
+    def write_artifact(
+        self, mission_id: str, relative_path: str, content: str, *, kind: str, created_by
+    ) -> Artifact:
         safe = relative_path.replace("\\", "/").lstrip("/")
         if ".." in safe.split("/"):
             raise ValueError(f"Unsafe artifact path: {relative_path}")

@@ -5,8 +5,7 @@ import os
 import shutil
 from pathlib import Path
 
-
-# Не даём случайно уехать на metered API, если в окружении висят ключи.
+# Strip metered API keys from the env so subscription runners stay on-plan.
 STRIP_ENV = {
     "OPENAI_API_KEY",
     "CODEX_API_KEY",
@@ -51,7 +50,7 @@ async def run_cmd(
             proc.communicate(input=input_text.encode("utf-8") if input_text is not None else None),
             timeout=timeout_s,
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         proc.kill()
         await proc.wait()
         return 124, "", f"timeout after {timeout_s}s: {' '.join(cmd)}"

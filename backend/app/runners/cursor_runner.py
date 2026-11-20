@@ -65,11 +65,15 @@ async def login() -> RunnerLoginResult:
     node = _node()
     script = _script_path()
     if not node or not script.exists():
-        return RunnerLoginResult(ok=False, runner=RunnerId.cursor, message="cursor-runner не найден")
+        return RunnerLoginResult(
+            ok=False, runner=RunnerId.cursor, message="cursor-runner не найден"
+        )
     cmd = [node, str(script), "login"]
     code, out, err = await run_cmd(cmd, timeout_s=300.0, env=clean_env(), cwd=script.parent)
     text = (out or err).strip()
-    ok = code == 0 and ("\"ok\": true" in text.replace(" ", "") or '"phase":"done"' in text.replace(" ", ""))
+    ok = code == 0 and (
+        '"ok": true' in text.replace(" ", "") or '"phase":"done"' in text.replace(" ", "")
+    )
     # soft parse
     try:
         for line in reversed(text.splitlines()):
@@ -93,7 +97,9 @@ async def run(prompt: str, workdir: Path, *, timeout_s: float = 600.0) -> Runner
     node = _node()
     script = _script_path()
     if not node or not script.exists():
-        return RunnerExecResult(ok=False, runner=RunnerId.cursor, summary="cursor-runner не установлен")
+        return RunnerExecResult(
+            ok=False, runner=RunnerId.cursor, summary="cursor-runner не установлен"
+        )
 
     workdir.mkdir(parents=True, exist_ok=True)
     before = snapshot_files(workdir)

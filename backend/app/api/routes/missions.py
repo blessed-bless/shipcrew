@@ -90,7 +90,9 @@ async def run_mission(mission_id: str, app: AppState = Depends(get_state)) -> Mi
     if mission.status == MissionStatus.running:
         return mission
     started = app.orchestrator.start(mission)
-    app.events.emit("mission_started", mission_id=mission_id, payload={"status": started.status.value})
+    app.events.emit(
+        "mission_started", mission_id=mission_id, payload={"status": started.status.value}
+    )
     if app.sqlite is not None:
         app.sqlite.upsert_mission(started)
     return started
@@ -169,7 +171,7 @@ async def mission_events(
                     yield _sse(item)
                     if item["type"] in {"mission_done", "mission_failed", "mission_cancelled"}:
                         break
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     yield _sse({"type": "ping", "payload": {}})
         finally:
             app.orchestrator.unsubscribe(mission_id, on_event)
@@ -178,7 +180,9 @@ async def mission_events(
 
 
 @router.get("/{mission_id}/artifacts/{artifact_path:path}")
-def read_artifact(mission_id: str, artifact_path: str, app: AppState = Depends(get_state)) -> dict[str, str]:
+def read_artifact(
+    mission_id: str, artifact_path: str, app: AppState = Depends(get_state)
+) -> dict[str, str]:
     mission = app.store.get(mission_id)
     if mission is None:
         raise HTTPException(404, "mission not found")
