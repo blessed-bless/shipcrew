@@ -33,7 +33,9 @@ def list_connections(app: AppState = Depends(get_state)) -> list[ConnectionPubli
 
 
 @router.post("/connections", response_model=ConnectionPublic)
-def create_connection(body: ConnectionCreate, app: AppState = Depends(get_state)) -> ConnectionPublic:
+def create_connection(
+    body: ConnectionCreate, app: AppState = Depends(get_state)
+) -> ConnectionPublic:
     meta = catalog_entry(body.provider.value)
     if meta is None:
         raise HTTPException(400, "unknown provider")
@@ -84,7 +86,9 @@ def delete_connection(connection_id: str, app: AppState = Depends(get_state)) ->
 
 @router.post("/connections/oauth/openrouter/start")
 def start_openrouter_oauth(request: Request, app: AppState = Depends(get_state)) -> dict[str, str]:
-    callback_url = f"{app.settings.public_base_url.rstrip('/')}/api/connections/oauth/openrouter/callback"
+    callback_url = (
+        f"{app.settings.public_base_url.rstrip('/')}/api/connections/oauth/openrouter/callback"
+    )
     frontend = app.settings.frontend_url.rstrip("/")
     referer = request.headers.get("referer")
     if referer and "127.0.0.1:8787" in referer:

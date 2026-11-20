@@ -41,7 +41,9 @@ class LLMClient:
         if self.demo:
             return self._demo_reply(role_name, user)
         if not self.api_key and self.provider != "ollama":
-            raise LLMError("Нет активного подключения к модели. Войди через браузер или добавь API-ключ.")
+            raise LLMError(
+                "Нет активного подключения к модели. Войди через браузер или добавь API-ключ."
+            )
 
         headers = {"Content-Type": "application/json"}
         if self.api_key:
@@ -227,7 +229,7 @@ class LLMClient:
                 "COPY requirements.txt .\n"
                 "RUN pip install --no-cache-dir -r requirements.txt\n"
                 "COPY . .\n"
-                "CMD [\"uvicorn\", \"main:app\", \"--host\", \"0.0.0.0\", \"--port\", \"8080\"]\n"
+                'CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]\n'
             )
             return json.dumps(
                 {
@@ -247,7 +249,9 @@ class LLMClient:
                 indent=2,
             )
 
-        return json.dumps({"summary": f"{role_name} completed", "raw_goal": goal}, ensure_ascii=False)
+        return json.dumps(
+            {"summary": f"{role_name} completed", "raw_goal": goal}, ensure_ascii=False
+        )
 
 
 def _extract(blob: str, key: str) -> str | None:

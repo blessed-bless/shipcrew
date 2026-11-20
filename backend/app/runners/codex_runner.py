@@ -7,7 +7,6 @@ from pathlib import Path
 from .process import changed_files, clean_env, run_cmd, snapshot_files, which
 from .types import RunnerExecResult, RunnerId, RunnerLoginResult, RunnerStatus
 
-
 NAME = "Codex (ChatGPT subscription)"
 
 
@@ -50,7 +49,7 @@ async def login() -> RunnerLoginResult:
     binary = which("codex")
     if not binary:
         return RunnerLoginResult(ok=False, runner=RunnerId.codex, message="codex не найден в PATH")
-    # Браузерный OAuth; процесс сам откроет браузер и дождётся callback.
+    # Browser OAuth; the process opens a browser and waits for the callback.
     code, out, err = await run_cmd([binary, "login"], timeout_s=300.0, env=clean_env())
     ok = code == 0 or "logged in" in f"{out}\n{err}".lower()
     return RunnerLoginResult(

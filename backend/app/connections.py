@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 from threading import Lock
@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 
 def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class AuthMethod(str, Enum):
@@ -152,7 +152,10 @@ class ConnectionStore:
 
     def list_public(self) -> list[ConnectionPublic]:
         with self._lock:
-            return [c.public() for c in sorted(self._items.values(), key=lambda x: x.created_at, reverse=True)]
+            return [
+                c.public()
+                for c in sorted(self._items.values(), key=lambda x: x.created_at, reverse=True)
+            ]
 
     def get(self, connection_id: str) -> ConnectionRecord | None:
         with self._lock:

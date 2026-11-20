@@ -33,7 +33,11 @@ async def login_runner(runner_id: str, app: AppState = Depends(get_state)) -> di
     if existing and existing.get("status") == "running":
         return {"ok": True, "started": False, "message": "login уже идёт", "job": existing}
 
-    app.login_jobs[runner_id] = {"status": "running", "message": "Открыли браузерный вход…", "ok": None}
+    app.login_jobs[runner_id] = {
+        "status": "running",
+        "message": "Открыли браузерный вход…",
+        "ok": None,
+    }
 
     async def _job() -> None:
         try:
@@ -47,7 +51,12 @@ async def login_runner(runner_id: str, app: AppState = Depends(get_state)) -> di
             app.login_jobs[runner_id] = {"status": "done", "ok": False, "message": str(exc)}
 
     asyncio.create_task(_job())
-    return {"ok": True, "started": True, "message": "login запущен в фоне", "job": app.login_jobs[runner_id]}
+    return {
+        "ok": True,
+        "started": True,
+        "message": "login запущен в фоне",
+        "job": app.login_jobs[runner_id],
+    }
 
 
 @router.get("/{runner_id}/login")

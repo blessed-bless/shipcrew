@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock
 from typing import Any
@@ -16,10 +16,12 @@ class EventLog:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = Lock()
 
-    def emit(self, kind: str, *, mission_id: str | None = None, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    def emit(
+        self, kind: str, *, mission_id: str | None = None, payload: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         event = {
             "id": uuid4().hex,
-            "ts": datetime.now(timezone.utc).isoformat(),
+            "ts": datetime.now(UTC).isoformat(),
             "kind": kind,
             "mission_id": mission_id,
             "payload": payload or {},

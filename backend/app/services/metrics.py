@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from ..models import Mission, MissionStatus
@@ -22,7 +22,7 @@ def mission_metrics(missions: list[Mission]) -> dict[str, Any]:
             continue
     avg_duration = sum(durations) / len(durations) if durations else 0.0
     return {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "mission_count": len(missions),
         "status_counts": dict(statuses),
         "engineer_runner_counts": dict(runners),

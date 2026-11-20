@@ -6,7 +6,6 @@ from pathlib import Path
 from .process import changed_files, clean_env, run_cmd, snapshot_files, which
 from .types import RunnerExecResult, RunnerId, RunnerLoginResult, RunnerStatus
 
-
 NAME = "Claude Code (subscription)"
 
 
@@ -48,8 +47,10 @@ def status() -> RunnerStatus:
 async def login() -> RunnerLoginResult:
     binary = which("claude")
     if not binary:
-        return RunnerLoginResult(ok=False, runner=RunnerId.claude, message="claude не найден в PATH")
-    # Предпочитаем auth login; fallback на /login стиль если команда другая.
+        return RunnerLoginResult(
+            ok=False, runner=RunnerId.claude, message="claude не найден в PATH"
+        )
+    # Prefer auth login; fall back to /login-style if the CLI differs.
     for cmd in ([binary, "auth", "login"], [binary, "login"]):
         code, out, err = await run_cmd(cmd, timeout_s=300.0, env=clean_env())
         text = f"{out}\n{err}".strip()
@@ -136,7 +137,9 @@ def _probe(cmd: list[str]) -> tuple[int, str, str]:
     import subprocess
 
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=20, env=clean_env(), check=False)
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=20, env=clean_env(), check=False
+        )
         return proc.returncode, proc.stdout or "", proc.stderr or ""
     except Exception as exc:  # noqa: BLE001
         return 1, "", str(exc)
